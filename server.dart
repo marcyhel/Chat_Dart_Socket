@@ -3,35 +3,52 @@ import 'dart:convert';
 
 class Cliente {
   int id;
+  String id_sala='';
   String nick = '';
   WebSocket conect;
-  Cliente(this.id, this.conect) {}
+  Cliente(this.id, this.conect){}
+}
+class Instancia{
+  List<WebSocket> conect=[];
+  List<String>historico=[];
+  String id;
+  Instancia(this.id){print("nova sala ${id}");}
+  void add_cliente(WebSocket conec){
+    
+    conect.add(conec);
+    conec.add(json.encode({'id':'ok'}));
+    historico.forEach((e){
+      conec.add(json.encode({'id':'msn','msn':json.decode(e)['msn'],'nick': json.decode(e)['nick']}));
+      });
+  }
+  void remove(WebSocket soc){
+    conect.remove(soc);
+  }
+
+  void sendOthers(mensagem,nick, WebSocket exeption) {
+    print("send");
+    historico.add(json.encode({'msn':mensagem,'nick':nick}));
+    conect.forEach((element) {
+      if (element != exeption) {
+        element.add(json.encode({'id':'msn','msn':mensagem,'nick':nick}));
+      }
+    });
+  }
 }
 
 class Sala {
   List<Cliente> clientes = [];
-  List<String> nick = [];
-  int vez_jogador = 1;
-  List<List<int>> tab = [
-    [0, 0, 0],
-    [0, 0, 0],
-    [0, 0, 0]
-  ];
+  List<Instancia> instanci=[];
+  
   Sala() {}
-  bool lance(x, y) {
-    if (tab[x][y] == 0) {
-      tab[x][y] = vez_jogador;
-      return true;
-    } else {
-      return false;
-    }
-  }
 
-  void alterna() {
-    if (vez_jogador == 1) {
-      vez_jogador = 2;
-    } else {
-      vez_jogador = 1;
+  
+  void iniciar_instancia(String id,){
+    print("ddddff");
+    var a=instanci.where((e){return (e.id == id);});
+    print(a);
+    if(a.length==0){
+      instanci.add(Instancia(id));
     }
   }
 
@@ -39,58 +56,49 @@ class Sala {
     var msn = json.decode(msns);
     if (msn['id'] == 'nick') {
       client.nick = msn['nick'];
-      sendOthers(
+      client.id_sala=msn['id_sala'];
+      iniciar_instancia(client.id_sala);
+      instanci.forEach((e){
+        if(e.id==client.id_sala){
+          e.add_cliente(client.conect);
+        }
+        });
+      /*sendOthers(
           json.encode({'id': 'nickOP', 'nick': client.nick}), client.conect);
       sendOthers(json.encode({'id': 'desenha'}), client.conect);
-      sendOthers(json.encode({'id': 'vez', 'vez': vez_jogador}), client.conect);
+      sendOthers(json.encode({'id': 'vez', 'vez': vez_jogador}), client.conect);*/
     }
-    if (msn['id'] == 'jogada') {
-      if (client.id == vez_jogador) {
-        try {
-          var aux = msn['jogada'].split(' ');
-          if (lance(int.parse(aux[0]), int.parse(aux[1]))) {
-            sendAll(json.encode({
-              'id': 'att',
-              'x': int.parse(aux[0]),
-              'y': int.parse(aux[1]),
-              'marc': vez_jogador
-            }));
-            sendAll(json.encode({'id': 'desenha'}));
-            alterna();
-            sendAll(json.encode({'id': 'vez', 'vez': vez_jogador}));
-          } else {
-            client.conect.add(json.encode(
-                {'id': 'erro', 'erro': 'jogada invalida\njogue novamente'}));
+    if (msn['id'] == 'msn') {
+        instanci.forEach((e){
+          if(e.id==msn['id_sala']){
+            e.sendOthers(msn['msn'],msn['nick'],client.conect);
           }
-        } catch (e) {
-          client.conect
-              .add(json.encode({'id': 'erro', 'erro': 'comando invalida'}));
-        }
-      } else {
-        client.conect
-            .add(json.encode({'id': 'erro', 'erro': 'Não é sua vez de jogar'}));
-      }
+          });
+        //client.conect
+         //   .add(json.encode({'id': 'erro', 'erro': 'Não é sua vez de jogar'}));
+      
+    }
+    if(msn['id']=="quit"){
+      instanci.forEach((e){
+          if(e.id==msn['id_sala']){
+            e.remove(client.conect);
+            print('remove');
+          }
+          });
     }
   }
-
-  void inicia() {
-    escutar();
-    print("aquiiiop");
-    clientes.forEach((e) {
-      e.conect.add(json.encode({'id': 'id', 'ident': e.id}));
-    });
-  }
-
-  void escutar() {
-    clientes.forEach((element) {
-      element.conect.listen((event) {
+  
+  void add_cliente(newCliente){
+      clientes.add(newCliente);
+      newCliente.conect.listen((event) {
         print(event);
-        // print("dd");
-        //sendOthers(event, element.conect);
-        chamadas(event, element);
+        
+        chamadas(event, newCliente);
       });
-    });
+      newCliente.conect.add(json.encode({'id': 'id', 'ident': newCliente.id}));
+ 
   }
+  
 
   void sendOthers(mensagem, WebSocket exeption) {
     clientes.forEach((element) {
@@ -117,24 +125,17 @@ main() {
   print('rodando');
   var port=int.parse(Platform.environment['PORT']??"8080");
   print(port);
+
   HttpServer.bind('0.0.0.0', port).then((server) {
     server.listen((HttpRequest request) {
       WebSocketTransformer.upgrade(request).then((cliente) {
         print("conect");
-        // cliente.add(sala.clientes.length.toString());
+        
+        sala.add_cliente(Cliente(sala.clientes.length + 1, cliente));
 
-        if (sala.clientes.length < 2) {
-          sala.addCliente(Cliente(sala.clientes.length + 1, cliente));
-        }
-        if (sala.clientes.length == 2) {
-          //sala.sendAll("");
-          sala.inicia();
-          salas.add(sala);
-          sala = Sala();
-        }
+       
       });
-      //request.response.write('Hello, world!');
-      //request.response.close();
+      
     });
   });
 }
