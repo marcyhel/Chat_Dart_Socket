@@ -78,6 +78,10 @@ class Sala {
          //   .add(json.encode({'id': 'erro', 'erro': 'Não é sua vez de jogar'}));
       
     }
+    if(msn['id']=="veri_time"){
+      print(msn);
+    }
+
     if(msn['id']=="quit"){
       instanci.forEach((e){
           if(e.id==msn['id_sala']){
